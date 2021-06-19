@@ -1,4 +1,6 @@
+import 'package:coffee_app/bloc/coffee_bloc.dart';
 import 'package:coffee_app/mocks/coffees.dart';
+import 'package:coffee_app/screens/coffee_details_screen.dart';
 import 'package:flutter/material.dart';
 
 const _duration = Duration(milliseconds: 300);
@@ -13,44 +15,12 @@ class CoffeeMainScreen extends StatefulWidget {
 
 class _CoffeeMainScreenState extends State<CoffeeMainScreen> {
 
-  final _pageController = PageController(
-    viewportFraction: 0.35,
-    initialPage: _initialPage.toInt(),
-  );
-
-  final _pageTextController = PageController(initialPage: _initialPage.toInt());
-
-  double _currentPage = _initialPage;
-  double _textPage = _initialPage;
-
-  void _coffeeScrollListener(){
-    setState(() {
-      _currentPage = _pageController.page!;
-    });
-  }
-
-  void _textScrollListener() {
-    setState(() {
-      _textPage = _currentPage;
-    });
-  }
+  final bloc = CoffeeBloc();
 
   @override
   void initState() {
-    // TODO: implement initState
-    _pageController.addListener(_coffeeScrollListener);
-    _pageTextController.addListener(_textScrollListener);
+    bloc.init();
     super.initState();
-  }
-
-  @override
-  void dispose() {
-    // TODO: implement dispose
-    _pageTextController.removeListener(_textScrollListener);
-    _pageController.removeListener(_coffeeScrollListener);
-    _pageTextController.dispose();
-    _pageController.dispose();
-    super.dispose();
   }
 
   @override
@@ -87,79 +57,121 @@ class _CoffeeMainScreenState extends State<CoffeeMainScreen> {
           Transform.scale(
             scale: 1.6,
             alignment: Alignment.bottomCenter,
-            child: PageView.builder(
-              controller: _pageController,
-              itemCount: coffees.length + 1,
-                scrollDirection: Axis.vertical,
-                onPageChanged: (value){
-                  if(value < coffees.length){
-                    _pageTextController.animateToPage(value, duration: _duration, curve: Curves.easeInOut);
-                  }
-                },
-                itemBuilder:(context, index){
-                if(index == 0){
-                  return SizedBox.shrink();
-                }
-                  final coffee = coffees[index - 1];
-                  final result = _currentPage - index + 1;
-                  final value  = -0.4 * result + 1;
-                  final opacity = value.clamp(0.0, 1.0);
-                  print(result);
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 20.0),
-                    child: Transform(
-                      alignment: Alignment.bottomCenter,
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.001)
-                        ..translate(0.0,_size.height/2.6 * (1 - value).abs())
-                      ..scale(value),
-                      child: Opacity(
-                        opacity: opacity,
-                          child: Image.asset(coffee.image, fit: BoxFit.fitHeight,)),
-                    ),
-                  );
-                }
+            child: ValueListenableBuilder<double>(
+              valueListenable: bloc.currentPage,
+              builder: (context, currentPage, _){
+                return PageView.builder(
+                    controller: bloc.pageController,
+                    itemCount: coffees.length + 1,
+                    scrollDirection: Axis.vertical,
+                    onPageChanged: (value){
+                      if(value < coffees.length){
+                        bloc.pageTextController.animateToPage(value, duration: _duration, curve: Curves.easeInOut);
+                      }
+                    },
+                    itemBuilder:(context, index){
+                      if(index == 0){
+                        return SizedBox.shrink();
+                      }
+                      final coffee = coffees[index - 1];
+                      final result = currentPage - index + 1;
+                      final value  = -0.4 * result + 1;
+                      final opacity = value.clamp(0.0, 1.0);
+                      print(result);
+                      return GestureDetector(
+                        onTap: (){
+                          Navigator.of(context).push(PageRouteBuilder(
+                              transitionDuration: const Duration(milliseconds: 650),
+                              pageBuilder:(context, animation, _){
+                                return FadeTransition(
+                                  opacity: animation,
+                                  child: CoffeeDetailsScreen(coffee: coffee,),
+                                );
+                              }
+                          )
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 20.0),
+                          child: Transform(
+                            alignment: Alignment.bottomCenter,
+                            transform: Matrix4.identity()
+                              ..setEntry(3, 2, 0.001)
+                              ..translate(0.0,_size.height/2.6 * (1 - value).abs())
+                              ..scale(value),
+                            child: Opacity(
+                                opacity: opacity,
+                                child: Hero(
+                                    tag: coffee.name,
+                                    child: Image.asset(coffee.image, fit: BoxFit.fitHeight,))),
+                          ),
+                        ),
+                      );
+                    }
+                );
+              },
             ),
           ),
           Positioned(
               top: 0.0,
               left: 0.0,
               right: 0.0,
-              child: Container(
-                height: 100,
-                child: Column(
-                  children: [
-                    Expanded(
-                        child: PageView.builder(
-                          itemCount: coffees.length,
-                            controller: _pageTextController,
-                            physics: NeverScrollableScrollPhysics(),
-                            itemBuilder: (context, index){
-                            final opacity = 1- (index - _textPage).abs().clamp(0.0, 1.0);
-                            return Opacity(
-                              opacity: opacity,
-                                child: Text(coffees[index].name,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  style: TextStyle(
-                                  fontSize: 25,
-                                  fontWeight: FontWeight.w700,
-                                ),));
-                            }
-                        )
-                    ),
-                    if(_currentPage < coffees.length)
-                    AnimatedSwitcher(
-                      duration: _duration,
-                        child: Text(
-                            '\$${coffees[_currentPage.toInt()].price.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 30.0
-                          ),
+              height: 100,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(begin: 1.0, end: 0.0),
+                builder: (context, value, child){
+                  return Transform.translate(
+                      offset: Offset(0.0, -100 * value),
+                    child: child,
+                  );
+                },
+                duration: _duration,
+                child: ValueListenableBuilder<double>(
+                  builder: (context, textPage,  _){
+                    return  Column(
+                      children: [
+                        Expanded(
+                            child: PageView.builder(
+                                itemCount: coffees.length,
+                                controller: bloc.pageTextController,
+                                physics: NeverScrollableScrollPhysics(),
+                                itemBuilder: (context, index){
+                                  final opacity = 1- (index - textPage).abs().clamp(0.0, 1.0);
+                                  return Opacity(
+                                      opacity: opacity,
+                                      child: Padding(
+                                        padding: EdgeInsets.symmetric(horizontal: _size.width * 0.2),
+                                        child: Hero(
+                                          tag: "text_${coffees[index].name}",
+                                          child: Material(
+                                            child: Text(coffees[index].name,
+                                              textAlign: TextAlign.center,
+                                              maxLines: 2,
+                                              style: TextStyle(
+                                                fontSize: 25,
+                                                fontWeight: FontWeight.w700,
+                                              ),),
+                                          ),
+                                        ),
+                                      ));
+                                }
+                            )
                         ),
-                      key: Key(coffees[_currentPage.toInt()].name),
-                    )
-                  ],
+                        if(textPage < coffees.length)
+                          AnimatedSwitcher(
+                            duration: _duration,
+                            child: Text(
+                              '\$${coffees[textPage.toInt()].price.toStringAsFixed(2)}',
+                              style: TextStyle(
+                                  fontSize: 30.0
+                              ),
+                            ),
+                            key: Key(coffees[textPage.toInt()].name),
+                          )
+                      ],
+                    );
+                  },
+                  valueListenable: bloc.textPage,
                 ),
               )
           ),
